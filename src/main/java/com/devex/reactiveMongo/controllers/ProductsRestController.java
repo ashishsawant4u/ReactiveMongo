@@ -5,6 +5,7 @@ import java.util.Optional;
 import javax.annotation.Resource;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,11 +21,17 @@ import com.devex.reactiveMongo.repository.ProductRepository;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 @RestController
 @RequestMapping("/prod")
 public class ProductsRestController 
 {
+	@Resource(name = "productSink")
+	Sinks.Many<Product> productSink;
+	
+	@Resource(name = "productFlux")
+	Flux<Product> productFlux;
 	
 	@Resource(name = "productRepository")
 	ProductRepository productRepository;
@@ -51,7 +58,8 @@ public class ProductsRestController
 	{
 		return newProd
 					  .flatMap(p -> productRepository.save(p))
-					  .map(p -> new ResponseEntity<>(p, HttpStatus.ACCEPTED));
+					  .map(p -> new ResponseEntity<>(p, HttpStatus.ACCEPTED))
+					  .doOnNext(p -> productSink.tryEmitNext(p.getBody()));
 	}
 	
 	@PutMapping("/update/{code}")
@@ -86,5 +94,11 @@ public class ProductsRestController
 	public Flux<Product> findByPriceRange(@PathVariable("min") String min,@PathVariable("max") String max)
 	{
 		return productRepository.findByPriceBetween(Double.parseDouble(min), Double.parseDouble(max));
+	}
+	
+	@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	public Flux<Product> streamNewProd()
+	{
+		return productFlux;
 	}
 }
